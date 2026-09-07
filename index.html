@@ -1,0 +1,411 @@
+<!--
+  Штамп показаний счётчика
+  Автор: alexanderkrivonogov (github.com/alexanderkrivonogov)
+  © 2026
+-->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="theme-color" content="#16221F">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Штамп показаний</title>
+<style>
+  :root{
+    --bg: #EAF0EE;
+    --surface: #FFFFFF;
+    --ink: #16221F;
+    --ink-soft: #57655F;
+    --line: #D9E2DF;
+    --day: #C98A2E;
+    --night: #34486B;
+    --radius: 14px;
+  }
+  *{ box-sizing: border-box; }
+  body{
+    margin:0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap{ max-width: 480px; margin:0 auto; padding: 20px 16px 50px; }
+  header{ margin-bottom: 16px; }
+  header h1{ font-size: 20px; margin:0 0 4px; }
+  header p{ margin:0; font-size: 13.5px; color: var(--ink-soft); line-height:1.4; }
+
+  .stage{
+    background: var(--surface); border:1px solid var(--line); border-radius: var(--radius);
+    padding: 12px; margin-bottom: 14px;
+  }
+  .drop{
+    border: 1px dashed #B9C6C2; border-radius: 10px; background:#F7FAF9;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding: 34px 10px; cursor:pointer; text-align:center;
+  }
+  .drop .icon{ font-size: 30px; margin-bottom: 8px; }
+  .drop b{ font-size: 14.5px; display:block; margin-bottom: 3px; }
+  .drop span{ font-size: 12.5px; color: var(--ink-soft); }
+  input[type=file]{ display:none; }
+
+  canvas{ width:100%; border-radius: 10px; display:none; background:#000; }
+
+  .retake{
+    display:none; margin-top: 10px; width:100%; padding: 9px; border-radius: 9px;
+    border: 1px solid var(--line); background: #FBFCFB; color: var(--ink-soft);
+    font-size: 13px;
+  }
+
+  .card{
+    background: var(--surface); border:1px solid var(--line); border-radius: var(--radius);
+    padding: 14px; margin-bottom: 14px;
+  }
+  .row{ display:flex; gap:10px; margin-bottom: 12px; }
+  .field{ flex:1; }
+  .field label{ display:block; font-size:12px; color: var(--ink-soft); margin-bottom:5px; }
+  .field input{
+    width:100%; padding: 10px 11px; border-radius:9px; border:1px solid var(--line);
+    font-size:16px; font-family: "SFMono-Regular", Consolas, Menlo, monospace; background:#FBFCFB; color:var(--ink);
+  }
+  .field.day input{ border-color:#E6C88C; }
+  .field.night input{ border-color:#AEB9D6; }
+
+  .date-toggle{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom: 14px; gap: 10px; flex-wrap: wrap;
+  }
+  .switch{ display:flex; align-items:center; gap:9px; font-size: 13.5px; color: var(--ink); cursor:pointer; }
+  .switch input{ width: 34px; height: 20px; appearance:none; -webkit-appearance:none;
+    background:#D9E2DF; border-radius: 20px; position:relative; cursor:pointer; outline:none; flex-shrink:0;
+  }
+  .switch input::before{
+    content:''; position:absolute; top:2px; left:2px; width:16px; height:16px;
+    background:#fff; border-radius:50%; transition: transform 0.15s;
+  }
+  .switch input:checked{ background: var(--ink); }
+  .switch input:checked::before{ transform: translateX(14px); }
+  .date-input{
+    padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line);
+    font-size: 13px; color: var(--ink); background:#FBFCFB;
+  }
+  .date-input:disabled{ opacity: 0.4; }
+
+  .type-picker{ display:flex; gap:8px; margin-bottom: 14px; }
+  .type-btn{
+    flex:1; padding: 10px 4px; border-radius: 9px; border: 1px solid var(--line);
+    background:#FBFCFB; font-size: 13px; color: var(--ink-soft); cursor:pointer;
+  }
+  .type-btn.active{ background: var(--ink); color:#fff; border-color: var(--ink); }
+
+  .corner-picker{ display:flex; gap:8px; margin-bottom: 14px; }
+  .corner-btn{
+    flex:1; padding: 8px 4px; border-radius: 8px; border: 1px solid var(--line);
+    background:#FBFCFB; font-size: 11.5px; color: var(--ink-soft); cursor:pointer;
+  }
+  .corner-btn.active{ background: var(--ink); color:#fff; border-color: var(--ink); }
+
+  button.primary{
+    width:100%; padding: 13px; border:none; border-radius: 10px;
+    background: var(--ink); color:#F3F6F5; font-size:15px; font-weight:600; cursor:pointer;
+  }
+  button.primary:disabled{ opacity:0.4; }
+  button.primary:active{ transform: scale(0.99); }
+
+  .toast{
+    position: fixed; bottom: 18px; left:50%; transform: translateX(-50%);
+    background: var(--ink); color:#fff; padding: 9px 16px; border-radius: 20px;
+    font-size:13px; opacity:0; transition: opacity 0.25s; pointer-events:none;
+  }
+  .toast.show{ opacity:1; }
+
+  .credit{
+    text-align:center; font-size: 12px; color: var(--ink-soft); margin-top: 22px;
+  }
+  .credit a{ color: var(--ink-soft); text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Штамп показаний</h1>
+    <p>Фото счётчика + день/ночь впечатываются прямо на снимок. Сохраняется одним изображением.</p>
+  </header>
+
+  <div class="stage">
+    <label class="drop" id="drop">
+      <div class="icon">📷</div>
+      <b id="dropTitle">Сфотографировать счётчик</b>
+      <span>Нажмите, откроется камера</span>
+      <input type="file" accept="image/*" capture="environment" id="fileInput">
+    </label>
+    <canvas id="canvas"></canvas>
+    <button class="retake" id="retakeBtn">Переснять фото</button>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div class="field">
+        <label>Квартира</label>
+        <input type="text" inputmode="numeric" id="flatInput" placeholder="№">
+      </div>
+    </div>
+    <div class="date-toggle">
+      <label class="switch">
+        <input type="checkbox" id="dateToggle" checked>
+        <span>Ставить дату на фото</span>
+      </label>
+      <input type="date" id="dateInput" class="date-input">
+    </div>
+
+    <div class="type-picker">
+      <button class="type-btn active" data-type="split">День / Ночь</button>
+      <button class="type-btn" data-type="single">Общий счётчик</button>
+    </div>
+
+    <div class="row" id="splitRow">
+      <div class="field day">
+        <label>День (Т1)</label>
+        <input type="text" inputmode="decimal" id="dayInput" placeholder="0000">
+      </div>
+      <div class="field night">
+        <label>Ночь (Т2)</label>
+        <input type="text" inputmode="decimal" id="nightInput" placeholder="0000">
+      </div>
+    </div>
+
+    <div class="row" id="singleRow" style="display:none;">
+      <div class="field">
+        <label>Показание</label>
+        <input type="text" inputmode="decimal" id="singleInput" placeholder="0000">
+      </div>
+    </div>
+
+    <label style="display:block; font-size:12px; color:var(--ink-soft); margin-bottom:7px;">Угол на фото</label>
+    <div class="corner-picker">
+      <button class="corner-btn" data-corner="tl">↖ верх-лево</button>
+      <button class="corner-btn" data-corner="tr">↗ верх-право</button>
+      <button class="corner-btn active" data-corner="bl">↙ низ-лево</button>
+      <button class="corner-btn" data-corner="br">↘ низ-право</button>
+    </div>
+
+    <button class="primary" id="saveBtn" disabled>Сначала сделайте фото</button>
+  </div>
+
+  <footer class="credit">
+    Разработано <a href="https://github.com/alexanderkrivonogov" target="_blank" rel="noopener">@alexanderkrivonogov</a>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const drop = $('drop');
+const fileInput = $('fileInput');
+const canvas = $('canvas');
+const ctx = canvas.getContext('2d');
+const retakeBtn = $('retakeBtn');
+const flatInput = $('flatInput');
+const dateToggle = $('dateToggle');
+const dateInput = $('dateInput');
+const dayInput = $('dayInput');
+const nightInput = $('nightInput');
+const singleInput = $('singleInput');
+const splitRow = $('splitRow');
+const singleRow = $('singleRow');
+
+function todayISO(){
+  const d = new Date();
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off*60000).toISOString().slice(0,10);
+}
+dateInput.value = todayISO();
+
+dateToggle.addEventListener('change', ()=>{
+  dateInput.disabled = !dateToggle.checked;
+  redraw();
+});
+dateInput.addEventListener('input', redraw);
+
+let meterType = 'split';
+document.querySelectorAll('.type-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.type-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    meterType = btn.getAttribute('data-type');
+    splitRow.style.display = meterType === 'split' ? 'flex' : 'none';
+    singleRow.style.display = meterType === 'single' ? 'flex' : 'none';
+    redraw();
+  });
+});
+const saveBtn = $('saveBtn');
+const toastEl = $('toast');
+
+let baseImg = null;
+let corner = 'bl';
+
+function showToast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(()=> toastEl.classList.remove('show'), 1800);
+}
+
+function todayShort(){
+  const d = new Date();
+  return d.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+
+function pickedDateShort(){
+  const iso = dateInput.value || todayISO();
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+
+document.querySelectorAll('.corner-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.corner-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    corner = btn.getAttribute('data-corner');
+    redraw();
+  });
+});
+
+fileInput.addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const maxW = 1400;
+      const scale = Math.min(1, maxW / img.width);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      baseImg = img;
+      canvas.style.display = 'block';
+      drop.style.display = 'none';
+      retakeBtn.style.display = 'block';
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Сохранить в галерею';
+      redraw();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+retakeBtn.addEventListener('click', ()=>{
+  baseImg = null;
+  canvas.style.display = 'none';
+  drop.style.display = 'flex';
+  retakeBtn.style.display = 'none';
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Сначала сделайте фото';
+  fileInput.value = '';
+});
+
+function wrapDraw(){
+  if(!baseImg) return;
+  ctx.drawImage(baseImg, 0, 0, canvas.width, canvas.height);
+}
+
+function redraw(){
+  if(!baseImg) return;
+  wrapDraw();
+
+  const flat = flatInput.value.trim();
+  const day = dayInput.value.trim();
+  const night = nightInput.value.trim();
+  const single = singleInput.value.trim();
+  const showDate = dateToggle.checked;
+
+  if(meterType === 'split' && !flat && !day && !night && !showDate){ return; }
+  if(meterType === 'single' && !flat && !single && !showDate){ return; }
+
+  const lines = [];
+  const dateStr = showDate ? pickedDateShort() : '';
+  if(flat && dateStr) lines.push(`кв. ${flat}  ${dateStr}`);
+  else if(flat) lines.push(`кв. ${flat}`);
+  else if(dateStr) lines.push(dateStr);
+
+  if(meterType === 'split'){
+    if(day) lines.push(['Д', day, '#F0C878']);
+    if(night) lines.push(['Н', night, '#B9C6E8']);
+  } else {
+    if(single) lines.push(['Показание', single, '#EAF0EE']);
+  }
+
+  if(lines.length === 0){ return; }
+
+  const scale = canvas.width / 1000;
+  const fontSize = Math.max(20, 30 * scale);
+  const padding = Math.max(10, 16 * scale);
+  const lineGap = fontSize * 1.35;
+
+  ctx.font = `600 ${fontSize}px "SFMono-Regular", Consolas, Menlo, monospace`;
+  ctx.textBaseline = 'top';
+
+  let boxW = 0;
+  const rendered = lines.map(l=>{
+    const text = Array.isArray(l) ? `${l[0]}: ${l[1]}` : l;
+    const w = ctx.measureText(text).width;
+    if(w > boxW) boxW = w;
+    return { text, color: Array.isArray(l) ? l[2] : '#EAF0EE' };
+  });
+  boxW += padding * 2;
+  const boxH = lineGap * rendered.length + padding * 1.2;
+
+  let x, y;
+  const margin = padding * 0.9;
+  if(corner === 'tl'){ x = margin; y = margin; }
+  if(corner === 'tr'){ x = canvas.width - boxW - margin; y = margin; }
+  if(corner === 'bl'){ x = margin; y = canvas.height - boxH - margin; }
+  if(corner === 'br'){ x = canvas.width - boxW - margin; y = canvas.height - boxH - margin; }
+
+  ctx.fillStyle = 'rgba(22,34,31,0.72)';
+  const r = 10 * scale;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + boxW, y, x + boxW, y + boxH, r);
+  ctx.arcTo(x + boxW, y + boxH, x, y + boxH, r);
+  ctx.arcTo(x, y + boxH, x, y, r);
+  ctx.arcTo(x, y, x + boxW, y, r);
+  ctx.closePath();
+  ctx.fill();
+
+  rendered.forEach((l, i)=>{
+    ctx.fillStyle = l.color;
+    ctx.fillText(l.text, x + padding, y + padding * 0.6 + i * lineGap);
+  });
+}
+
+flatInput.addEventListener('input', redraw);
+dayInput.addEventListener('input', redraw);
+nightInput.addEventListener('input', redraw);
+singleInput.addEventListener('input', redraw);
+
+saveBtn.addEventListener('click', ()=>{
+  if(!baseImg){ return; }
+  canvas.toBlob((blob)=>{
+    const fileName = `schetchik-${new Date().toISOString().slice(0,10)}-${Date.now()}.jpg`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=> URL.revokeObjectURL(url), 4000);
+    showToast('Сохранено в Загрузки');
+  }, 'image/jpeg', 0.9);
+});
+</script>
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
