@@ -34,6 +34,17 @@
   header h1{ font-size: 20px; margin:0 0 4px; }
   header p{ margin:0; font-size: 13.5px; color: var(--ink-soft); line-height:1.4; }
 
+  .house-card{
+    background: var(--surface); border:1px solid var(--line); border-radius: var(--radius);
+    padding: 12px 14px; margin-bottom: 14px;
+  }
+  .house-card label{ display:block; font-size:12px; color: var(--ink-soft); margin-bottom:5px; }
+  .house-card input{
+    width:100%; padding: 10px 11px; border-radius:9px; border:1px solid var(--line);
+    font-size:14.5px; background:#FBFCFB; color:var(--ink);
+  }
+  .house-card .hint{ font-size:11.5px; color: var(--ink-soft); margin-top:6px; }
+
   .stage{
     background: var(--surface); border:1px solid var(--line); border-radius: var(--radius);
     padding: 12px; margin-bottom: 14px;
@@ -47,6 +58,28 @@
   .drop b{ font-size: 14.5px; display:block; margin-bottom: 3px; }
   .drop span{ font-size: 12.5px; color: var(--ink-soft); }
   input[type=file]{ display:none; }
+
+  .cam-wrap{ display:none; position:relative; border-radius:10px; overflow:hidden; background:#000; }
+  .cam-wrap video{ width:100%; display:block; }
+  .cam-controls{
+    position:absolute; bottom:10px; left:0; right:0;
+    display:flex; align-items:center; justify-content:center; gap:14px;
+  }
+  .torch-btn{
+    width:44px; height:44px; border-radius:50%; border:1px solid rgba(255,255,255,0.5);
+    background: rgba(0,0,0,0.35); color:#fff; font-size:18px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .torch-btn.on{ background: var(--day); border-color: var(--day); }
+  .shutter-btn{
+    width:64px; height:64px; border-radius:50%; border:4px solid #fff;
+    background: rgba(255,255,255,0.25); cursor:pointer;
+  }
+  .cam-note{
+    position:absolute; top:8px; left:8px; right:8px; text-align:center;
+    font-size:11px; color:#fff; background:rgba(0,0,0,0.4); border-radius:6px; padding:4px 6px;
+    display:none;
+  }
 
   canvas{ width:100%; border-radius: 10px; display:none; background:#000; }
 
@@ -131,13 +164,28 @@
     <p>Фото счётчика + день/ночь впечатываются прямо на снимок. Сохраняется одним изображением.</p>
   </header>
 
+  <div class="house-card">
+    <label>Улица и дом (заполнить один раз)</label>
+    <input type="text" id="houseInput" placeholder="напр. ул. Ленина, д. 5">
+    <div class="hint">Запоминается на этом телефоне, не нужно вводить каждый раз</div>
+  </div>
+
   <div class="stage">
     <label class="drop" id="drop">
       <div class="icon">📷</div>
-      <b id="dropTitle">Сфотографировать счётчик</b>
-      <span>Нажмите, откроется камера</span>
-      <input type="file" accept="image/*" capture="environment" id="fileInput">
+      <b id="dropTitle">Открыть камеру</b>
+      <span>Фонарик можно включить прямо в камере</span>
     </label>
+
+    <div class="cam-wrap" id="camWrap">
+      <div class="cam-note" id="camNote"></div>
+      <video id="video" autoplay playsinline muted></video>
+      <div class="cam-controls">
+        <button class="torch-btn" id="torchBtn" title="Фонарик">🔦</button>
+        <button class="shutter-btn" id="shutterBtn" title="Сделать фото"></button>
+      </div>
+    </div>
+
     <canvas id="canvas"></canvas>
     <button class="retake" id="retakeBtn">Переснять фото</button>
   </div>
@@ -201,10 +249,16 @@
 <script>
 const $ = id => document.getElementById(id);
 const drop = $('drop');
-const fileInput = $('fileInput');
+const dropTitle = $('dropTitle');
+const camWrap = $('camWrap');
+const camNote = $('camNote');
+const video = $('video');
+const torchBtn = $('torchBtn');
+const shutterBtn = $('shutterBtn');
 const canvas = $('canvas');
 const ctx = canvas.getContext('2d');
 const retakeBtn = $('retakeBtn');
+const houseInput = $('houseInput');
 const flatInput = $('flatInput');
 const dateToggle = $('dateToggle');
 const dateInput = $('dateInput');
@@ -213,6 +267,30 @@ const nightInput = $('nightInput');
 const singleInput = $('singleInput');
 const splitRow = $('splitRow');
 const singleRow = $('singleRow');
+const saveBtn = $('saveBtn');
+const toastEl = $('toast');
+
+let baseImg = null;
+let corner = 'bl';
+let meterType = 'split';
+let stream = null;
+let track = null;
+let torchOn = false;
+
+// --- house field persistence ---
+try{
+  const savedHouse = localStorage.getItem('meter-house');
+  if(savedHouse) houseInput.value = savedHouse;
+}catch(err){}
+houseInput.addEventListener('input', ()=>{
+  try{ localStorage.setItem('meter-house', houseInput.value); }catch(err){}
+});
+
+function showToast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(()=> toastEl.classList.remove('show'), 1800);
+}
 
 function todayISO(){
   const d = new Date();
@@ -221,13 +299,22 @@ function todayISO(){
 }
 dateInput.value = todayISO();
 
+function todayShort(){
+  const d = new Date();
+  return d.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+function pickedDateShort(){
+  const iso = dateInput.value || todayISO();
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+
 dateToggle.addEventListener('change', ()=>{
   dateInput.disabled = !dateToggle.checked;
   redraw();
 });
 dateInput.addEventListener('input', redraw);
 
-let meterType = 'split';
 document.querySelectorAll('.type-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     document.querySelectorAll('.type-btn').forEach(b=>b.classList.remove('active'));
@@ -238,28 +325,6 @@ document.querySelectorAll('.type-btn').forEach(btn=>{
     redraw();
   });
 });
-const saveBtn = $('saveBtn');
-const toastEl = $('toast');
-
-let baseImg = null;
-let corner = 'bl';
-
-function showToast(msg){
-  toastEl.textContent = msg;
-  toastEl.classList.add('show');
-  setTimeout(()=> toastEl.classList.remove('show'), 1800);
-}
-
-function todayShort(){
-  const d = new Date();
-  return d.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' });
-}
-
-function pickedDateShort(){
-  const iso = dateInput.value || todayISO();
-  const d = new Date(iso + 'T00:00:00');
-  return d.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' });
-}
 
 document.querySelectorAll('.corner-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
@@ -270,38 +335,101 @@ document.querySelectorAll('.corner-btn').forEach(btn=>{
   });
 });
 
-fileInput.addEventListener('change', (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev)=>{
-    const img = new Image();
-    img.onload = ()=>{
-      const maxW = 1400;
-      const scale = Math.min(1, maxW / img.width);
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
-      baseImg = img;
-      canvas.style.display = 'block';
-      drop.style.display = 'none';
-      retakeBtn.style.display = 'block';
-      saveBtn.disabled = false;
-      saveBtn.textContent = 'Сохранить в галерею';
-      redraw();
-    };
-    img.src = ev.target.result;
-  };
-  reader.readAsDataURL(file);
+// --- camera flow ---
+async function openCamera(){
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1600 } },
+      audio: false
+    });
+  }catch(err){
+    showToast('Нет доступа к камере');
+    return;
+  }
+  track = stream.getVideoTracks()[0];
+  video.srcObject = stream;
+  drop.style.display = 'none';
+  camWrap.style.display = 'block';
+
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  if(caps && caps.torch){
+    torchBtn.style.display = 'flex';
+    camNote.style.display = 'none';
+  } else {
+    torchBtn.style.display = 'none';
+    camNote.textContent = 'На этом устройстве фонарик через браузер недоступен — включите его вручную (например, из шторки уведомлений)';
+    camNote.style.display = 'block';
+  }
+  torchOn = false;
+  torchBtn.classList.remove('on');
+}
+
+drop.addEventListener('click', (e)=>{
+  e.preventDefault();
+  openCamera();
 });
+
+torchBtn.addEventListener('click', async ()=>{
+  if(!track) return;
+  torchOn = !torchOn;
+  try{
+    await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+    torchBtn.classList.toggle('on', torchOn);
+  }catch(err){
+    showToast('Не удалось включить фонарик');
+    torchOn = !torchOn;
+  }
+});
+
+function stopCamera(){
+  if(stream){
+    stream.getTracks().forEach(t=>t.stop());
+  }
+  stream = null;
+  track = null;
+  camWrap.style.display = 'none';
+}
+
+shutterBtn.addEventListener('click', ()=>{
+  if(!video.videoWidth) return;
+  const maxW = 1400;
+  const scale = Math.min(1, maxW / video.videoWidth);
+  canvas.width = video.videoWidth * scale;
+  canvas.height = video.videoHeight * scale;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const frameImg = new Image();
+  frameImg.onload = ()=>{
+    baseImg = frameImg;
+    stopCamera();
+    canvas.style.display = 'block';
+    retakeBtn.style.display = 'block';
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Сохранить в галерею';
+    redraw();
+  };
+  frameImg.src = canvas.toDataURL('image/jpeg', 0.92);
+});
+
+function resetFieldsForRetake(){
+  flatInput.value = '';
+  dayInput.value = '';
+  nightInput.value = '';
+  singleInput.value = '';
+  dateInput.value = todayISO();
+  dateToggle.checked = true;
+  dateInput.disabled = false;
+}
 
 retakeBtn.addEventListener('click', ()=>{
   baseImg = null;
   canvas.style.display = 'none';
-  drop.style.display = 'flex';
   retakeBtn.style.display = 'none';
   saveBtn.disabled = true;
   saveBtn.textContent = 'Сначала сделайте фото';
-  fileInput.value = '';
+  resetFieldsForRetake();
+  drop.style.display = 'flex';
+  openCamera();
 });
 
 function wrapDraw(){
@@ -384,10 +512,39 @@ dayInput.addEventListener('input', redraw);
 nightInput.addEventListener('input', redraw);
 singleInput.addEventListener('input', redraw);
 
+function sanitizeForFilename(str){
+  return str
+    .trim()
+    .replace(/[\\\/:*?"<>|,.]/g, '')
+    .replace(/\s+/g, '-');
+}
+
+function padFlat(flat){
+  const digitsOnly = flat.replace(/\D/g, '');
+  if(digitsOnly && digitsOnly === flat){
+    return digitsOnly.padStart(3, '0');
+  }
+  return flat;
+}
+
+function buildFileName(){
+  const parts = [];
+  const house = sanitizeForFilename(houseInput.value || '');
+  const flat = flatInput.value.trim();
+  const dateForName = dateInput.value || todayISO();
+
+  if(flat) parts.push(`кв${padFlat(flat)}`);
+  if(house) parts.push(house);
+  parts.push(dateForName);
+
+  const base = parts.length ? parts.join('_') : `Показания-${Date.now()}`;
+  return `${base}.jpg`;
+}
+
 saveBtn.addEventListener('click', ()=>{
   if(!baseImg){ return; }
   canvas.toBlob((blob)=>{
-    const fileName = `schetchik-${new Date().toISOString().slice(0,10)}-${Date.now()}.jpg`;
+    const fileName = buildFileName();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -399,6 +556,8 @@ saveBtn.addEventListener('click', ()=>{
     showToast('Сохранено в Загрузки');
   }, 'image/jpeg', 0.9);
 });
+
+window.addEventListener('beforeunload', stopCamera);
 </script>
 <script>
 if('serviceWorker' in navigator){
