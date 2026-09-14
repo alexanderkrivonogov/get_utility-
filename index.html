@@ -192,6 +192,7 @@
 
     <canvas id="canvas"></canvas>
     <button class="retake" id="retakeBtn">Переснять фото</button>
+    <button class="retake" id="closeCamBtn" style="display:none;">Выключить камеру и фонарик</button>
   </div>
 
   <div class="card">
@@ -262,6 +263,7 @@ const shutterBtn = $('shutterBtn');
 const canvas = $('canvas');
 const ctx = canvas.getContext('2d');
 const retakeBtn = $('retakeBtn');
+const closeCamBtn = $('closeCamBtn');
 const houseInput = $('houseInput');
 const villageInput = $('villageInput');
 const flatInput = $('flatInput');
@@ -361,6 +363,7 @@ async function openCamera(){
   video.srcObject = stream;
   drop.style.display = 'none';
   camWrap.style.display = 'block';
+  closeCamBtn.style.display = 'block';
 
   const caps = track.getCapabilities ? track.getCapabilities() : {};
   if(caps && caps.torch){
@@ -405,6 +408,15 @@ torchBtn.addEventListener('click', async ()=>{
   }
 });
 
+closeCamBtn.addEventListener('click', ()=>{
+  stopCamera();
+  desiredTorch = false;
+  torchOn = false;
+  camWrap.style.display = 'none';
+  closeCamBtn.style.display = 'none';
+  drop.style.display = 'flex';
+});
+
 function stopCamera(){
   if(stream){
     stream.getTracks().forEach(t=>t.stop());
@@ -425,7 +437,7 @@ shutterBtn.addEventListener('click', ()=>{
   const frameImg = new Image();
   frameImg.onload = ()=>{
     baseImg = frameImg;
-    stopCamera();
+    camWrap.style.display = 'none';
     canvas.style.display = 'block';
     retakeBtn.style.display = 'block';
     saveBtn.disabled = false;
@@ -452,8 +464,13 @@ retakeBtn.addEventListener('click', ()=>{
   saveBtn.disabled = true;
   saveBtn.textContent = 'Сначала сделайте фото';
   resetFieldsForRetake();
-  drop.style.display = 'flex';
-  openCamera();
+
+  if(stream && track && track.readyState === 'live'){
+    camWrap.style.display = 'block';
+  } else {
+    drop.style.display = 'flex';
+    openCamera();
+  }
 });
 
 function wrapDraw(){
