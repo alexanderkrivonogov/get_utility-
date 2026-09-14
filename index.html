@@ -165,6 +165,10 @@
   </header>
 
   <div class="house-card">
+    <label>Посёлок / населённый пункт (заполнить один раз)</label>
+    <input type="text" id="villageInput" placeholder="напр. п. Боровский">
+    <div class="hint" style="margin-bottom:12px;">Тоже запоминается на телефоне</div>
+
     <label>Улица и дом (заполнить один раз)</label>
     <input type="text" id="houseInput" placeholder="напр. ул. Ленина, д. 5">
     <div class="hint">Запоминается на этом телефоне, не нужно вводить каждый раз</div>
@@ -259,6 +263,7 @@ const canvas = $('canvas');
 const ctx = canvas.getContext('2d');
 const retakeBtn = $('retakeBtn');
 const houseInput = $('houseInput');
+const villageInput = $('villageInput');
 const flatInput = $('flatInput');
 const dateToggle = $('dateToggle');
 const dateInput = $('dateInput');
@@ -276,14 +281,20 @@ let meterType = 'split';
 let stream = null;
 let track = null;
 let torchOn = false;
+let desiredTorch = false;
 
-// --- house field persistence ---
+// --- house/village field persistence ---
 try{
   const savedHouse = localStorage.getItem('meter-house');
   if(savedHouse) houseInput.value = savedHouse;
+  const savedVillage = localStorage.getItem('meter-village');
+  if(savedVillage) villageInput.value = savedVillage;
 }catch(err){}
 houseInput.addEventListener('input', ()=>{
   try{ localStorage.setItem('meter-house', houseInput.value); }catch(err){}
+});
+villageInput.addEventListener('input', ()=>{
+  try{ localStorage.setItem('meter-village', villageInput.value); }catch(err){}
 });
 
 function showToast(msg){
@@ -355,13 +366,24 @@ async function openCamera(){
   if(caps && caps.torch){
     torchBtn.style.display = 'flex';
     camNote.style.display = 'none';
+    if(desiredTorch){
+      try{
+        await track.applyConstraints({ advanced: [{ torch: true }] });
+        torchOn = true;
+        torchBtn.classList.add('on');
+      }catch(err){
+        torchOn = false;
+        torchBtn.classList.remove('on');
+      }
+    } else {
+      torchOn = false;
+      torchBtn.classList.remove('on');
+    }
   } else {
     torchBtn.style.display = 'none';
     camNote.textContent = 'На этом устройстве фонарик через браузер недоступен — включите его вручную (например, из шторки уведомлений)';
     camNote.style.display = 'block';
   }
-  torchOn = false;
-  torchBtn.classList.remove('on');
 }
 
 drop.addEventListener('click', (e)=>{
@@ -372,12 +394,14 @@ drop.addEventListener('click', (e)=>{
 torchBtn.addEventListener('click', async ()=>{
   if(!track) return;
   torchOn = !torchOn;
+  desiredTorch = torchOn;
   try{
     await track.applyConstraints({ advanced: [{ torch: torchOn }] });
     torchBtn.classList.toggle('on', torchOn);
   }catch(err){
     showToast('Не удалось включить фонарик');
     torchOn = !torchOn;
+    desiredTorch = torchOn;
   }
 });
 
@@ -529,11 +553,13 @@ function padFlat(flat){
 
 function buildFileName(){
   const parts = [];
+  const village = sanitizeForFilename(villageInput.value || '');
   const house = sanitizeForFilename(houseInput.value || '');
   const flat = flatInput.value.trim();
   const dateForName = dateInput.value || todayISO();
 
   if(flat) parts.push(`кв${padFlat(flat)}`);
+  if(village) parts.push(village);
   if(house) parts.push(house);
   parts.push(dateForName);
 
