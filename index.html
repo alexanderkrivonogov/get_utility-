@@ -59,8 +59,8 @@
   .drop span{ font-size: 12.5px; color: var(--ink-soft); }
   input[type=file]{ display:none; }
 
-  .cam-wrap{ display:none; position:relative; border-radius:10px; overflow:hidden; background:#000; }
-  .cam-wrap video{ width:100%; display:block; }
+  .cam-wrap{ display:none; position:relative; border-radius:10px; overflow:hidden; background:#000; aspect-ratio: 4 / 5; }
+  .cam-wrap video{ width:100%; height:100%; object-fit:cover; display:block; }
   .cam-controls{
     position:absolute; bottom:10px; left:0; right:0;
     display:flex; align-items:center; justify-content:center; gap:14px;
@@ -81,7 +81,10 @@
     display:none;
   }
 
-  canvas{ width:100%; border-radius: 10px; display:none; background:#000; }
+  canvas{
+    width:100%; height:100%; border-radius: 10px; display:none; background:#000;
+    position:absolute; top:0; left:0; object-fit:cover;
+  }
 
   .retake{
     display:none; margin-top: 10px; width:100%; padding: 9px; border-radius: 9px;
@@ -184,13 +187,13 @@
     <div class="cam-wrap" id="camWrap">
       <div class="cam-note" id="camNote"></div>
       <video id="video" autoplay playsinline muted></video>
-      <div class="cam-controls">
+      <canvas id="canvas"></canvas>
+      <div class="cam-controls" id="camControls">
         <button class="torch-btn" id="torchBtn" title="Фонарик">🔦</button>
         <button class="shutter-btn" id="shutterBtn" title="Сделать фото"></button>
       </div>
     </div>
 
-    <canvas id="canvas"></canvas>
     <button class="retake" id="retakeBtn">Переснять фото</button>
     <button class="retake" id="closeCamBtn" style="display:none;">Выключить камеру и фонарик</button>
   </div>
@@ -256,6 +259,7 @@ const $ = id => document.getElementById(id);
 const drop = $('drop');
 const dropTitle = $('dropTitle');
 const camWrap = $('camWrap');
+const camControls = $('camControls');
 const camNote = $('camNote');
 const video = $('video');
 const torchBtn = $('torchBtn');
@@ -352,7 +356,11 @@ document.querySelectorAll('.corner-btn').forEach(btn=>{
 async function openCamera(){
   try{
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1600 } },
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1200 },
+        aspectRatio: { ideal: 4/5 }
+      },
       audio: false
     });
   }catch(err){
@@ -363,6 +371,7 @@ async function openCamera(){
   video.srcObject = stream;
   drop.style.display = 'none';
   camWrap.style.display = 'block';
+  camControls.style.display = 'flex';
   closeCamBtn.style.display = 'block';
 
   const caps = track.getCapabilities ? track.getCapabilities() : {};
@@ -428,16 +437,35 @@ function stopCamera(){
 
 shutterBtn.addEventListener('click', ()=>{
   if(!video.videoWidth) return;
-  const maxW = 1400;
-  const scale = Math.min(1, maxW / video.videoWidth);
-  canvas.width = video.videoWidth * scale;
-  canvas.height = video.videoHeight * scale;
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const targetAspect = 4/5; // width / height
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  const sourceAspect = vw / vh;
+
+  let cropX, cropY, cropW, cropH;
+  if(sourceAspect > targetAspect){
+    cropH = vh;
+    cropW = vh * targetAspect;
+    cropX = (vw - cropW) / 2;
+    cropY = 0;
+  } else {
+    cropW = vw;
+    cropH = vw / targetAspect;
+    cropX = 0;
+    cropY = (vh - cropH) / 2;
+  }
+
+  const outW = 1200;
+  const outH = Math.round(outW / targetAspect);
+  canvas.width = outW;
+  canvas.height = outH;
+  ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, outW, outH);
 
   const frameImg = new Image();
   frameImg.onload = ()=>{
     baseImg = frameImg;
-    camWrap.style.display = 'none';
+    camControls.style.display = 'none';
     canvas.style.display = 'block';
     retakeBtn.style.display = 'block';
     saveBtn.disabled = false;
@@ -466,7 +494,7 @@ retakeBtn.addEventListener('click', ()=>{
   resetFieldsForRetake();
 
   if(stream && track && track.readyState === 'live'){
-    camWrap.style.display = 'block';
+    camControls.style.display = 'flex';
   } else {
     drop.style.display = 'flex';
     openCamera();
