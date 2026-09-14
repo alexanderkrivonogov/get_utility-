@@ -59,7 +59,7 @@
   .drop span{ font-size: 12.5px; color: var(--ink-soft); }
   input[type=file]{ display:none; }
 
-  .cam-wrap{ display:none; position:relative; border-radius:10px; overflow:hidden; background:#000; aspect-ratio: 4 / 5; }
+  .cam-wrap{ display:none; position:relative; border-radius:10px; overflow:hidden; background:#000; aspect-ratio: 1 / 1; }
   .cam-wrap video{ width:100%; height:100%; object-fit:cover; display:block; }
   .cam-controls{
     position:absolute; bottom:10px; left:0; right:0;
@@ -359,7 +359,7 @@ async function openCamera(){
       video: {
         facingMode: { ideal: 'environment' },
         width: { ideal: 1200 },
-        aspectRatio: { ideal: 4/5 }
+        aspectRatio: { ideal: 1 }
       },
       audio: false
     });
@@ -438,7 +438,7 @@ function stopCamera(){
 shutterBtn.addEventListener('click', ()=>{
   if(!video.videoWidth) return;
 
-  const targetAspect = 4/5; // width / height
+  const targetAspect = 1; // width / height
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   const sourceAspect = vw / vh;
